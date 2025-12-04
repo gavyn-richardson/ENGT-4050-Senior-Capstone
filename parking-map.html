@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Campus Parking Map Demo</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+
+    :root {
+      --md-surface: #FFFFFF;
+      --md-background: #F5F5F5;
+      --md-shadow: 0px 2px 10px rgba(0,0,0,0.08);
+      --md-radius: 12px;
+      --md-primary: #1E88E5;
+    }
+
+    :root.dark {
+      --md-surface: #1E1E1E;
+      --md-background: #121212;
+      --md-primary: #1560BD;
+    }
+
+    :root.dark body {
+      color: #e0e0e0;
+    }
+
+    :root.dark #mapContainer {
+      background: #1E1E1E;
+    }
+
+    :root.dark #zoomSvg {
+      background: #2A2A2A !important;
+    }
+
+    :root.dark .legend-color {
+      box-shadow: inset 0 0 3px rgba(255,255,255,0.2);
+    }
+
+    body, .md-card, .app-bar {
+      transition: background 0.3s ease, color 0.3s ease;
+    }
+
+    #mapContainer, #zoomSvg {
+      transition: background 0.6s ease;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Roboto', sans-serif;
+      background: var(--md-background);
+      color: #333;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .app-bar {
+      background: var(--md-primary);
+      color: white;
+      padding: 18px 28px;
+      font-size: 22px;
+      font-weight: 500;
+      letter-spacing: 0.3px;
+      box-shadow: var(--md-shadow);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .switch {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 15px;
+    }
+
+    .switch input {
+      display: none;
+    }
+
+    .slider {
+      width: 46px;
+      height: 24px;
+      background: #ccc;
+      border-radius: 24px;
+      position: relative;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+
+    .slider::before {
+      content: "";
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      top: 2px;
+      left: 2px;
+      background: white;
+      border-radius: 50%;
+      transition: transform 0.3s ease;
+    }
+
+    input:checked + .slider {
+      background: #555;
+    }
+
+    input:checked + .slider::before {
+      transform: translateX(22px);
+    }
+
+    .main {
+      padding: 26px;
+      display: flex;
+      flex-direction: column;
+      gap: 26px;
+      align-items: center;
+    }
+
+    .md-card {
+      background: var(--md-surface);
+      border-radius: var(--md-radius);
+      box-shadow: var(--md-shadow);
+      padding: 18px;
+    }
+
+    #mapContainer {
+      width: 60%;
+      max-width: 1100px;
+      height: 60vh;
+      background: #fff;
+      border-radius: var(--md-radius);
+      box-shadow: var(--md-shadow);
+      overflow: hidden;
+      padding: 0;
+    }
+
+    .legend {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      background: var(--md-surface);
+      border-radius: var(--md-radius);
+      box-shadow: var(--md-shadow);
+      font-size: 16px;
+      padding: 14px 20px;
+      opacity: 1;
+      transition: opacity 0.3s ease;
+    }
+
+    #legendLabel {
+      font-weight: 700;
+    }
+
+    .legend-color {
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      margin-right: 6px;
+      box-shadow: inset 0 0 3px rgba(0,0,0,0.2);
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .gradient-bar {
+      width: 200px;
+      height: 18px;
+      border-radius: 4px;
+      background: linear-gradient(to right, #4CAF50, #FFEB3B, #F44336);
+      box-shadow: inset 0 0 3px rgba(0,0,0,0.25);
+      transition: opacity 0.3s ease;
+    }
+
+    #lotTooltip {
+      position: absolute;
+      pointer-events: none;
+      padding: 10px 14px;
+      background: rgba(60,60,60,0.95);
+      color: white;
+      border-radius: 8px;
+      font-size: 14px;
+      box-shadow: 0 3px 14px rgba(0,0,0,0.25);
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      backdrop-filter: blur(6px);
+      z-index: 9999;
+    }
+
+    .space-rect {
+      pointer-events: none;
+      stroke-width: 4;
+      fill-opacity: 0.45;
+      opacity: 0;
+      transition:
+        fill 0.35s cubic-bezier(.4,0,.2,1),
+        stroke 0.35s cubic-bezier(.4,0,.2,1),
+        opacity 0.3s ease;
+    }
+
+    #lotAStatusRect {
+      transition:
+        fill 0.45s cubic-bezier(.4,0,.2,1),
+        stroke 0.45s cubic-bezier(.4,0,.2,1),
+        opacity 0.45s ease;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="app-bar">
+    <span>Campus Parking Demo - Lot A</span>
+
+    <label class="switch">
+      <input type="checkbox" id="themeToggle">
+      <span class="slider"></span>
+      <span id="themeLabel">Light Mode</span>
+    </label>
+  </div>
+
+  <div class="main">
+
+    <div id="mapContainer" class="md-card">
+      <svg id="zoomSvg" width="100%" height="100%"
+           viewBox="0 0 4032 3024" style="background:#ddd;">
+
+        <image href="parkinglot.svg" x="0" y="0" width="4032" height="3024"></image>
+
+        <rect id="lotAStatusRect"
+              x="965.75" y="181.63"
+              width="2091.90" height="2643.78"
+              fill="rgba(0,255,0,0.25)"
+              stroke="rgba(0,0,0,0.35)"
+              stroke-width="8"
+              style="cursor:pointer;"></rect>
+
+        <g id="overlay"></g>
+      </svg>
+    </div>
+
+    <div class="legend md-card" id="legendBox">
+      <span id="legendLabel">Lot:</span>
+      <span id="legendLeft">Empty</span>
+      <div class="gradient-bar" id="gradientBar"></div>
+      <span id="legendRight">Full</span>
+
+      <div class="legend-item" id="spaceLegendOpen" style="display:none;">
+        <div class="legend-color" style="background:#4CAF50"></div><span>Open</span>
+      </div>
+      <div class="legend-item" id="spaceLegendOcc" style="display:none;">
+        <div class="legend-color" style="background:#F44336"></div><span>Occupied</span>
+      </div>
+    </div>
+
+  </div>
+
+  <div id="lotTooltip"></div>
+
+  <script>
+  const SPACES_URL = "output/spaces.json";
+
+  const svg     = document.getElementById("zoomSvg");
+  const overlay = document.getElementById("overlay");
+  const lotRect = document.getElementById("lotAStatusRect");
+  const tooltip = document.getElementById("lotTooltip");
+
+  const legendBox  = document.getElementById("legendBox");
+  const legendLabel = document.getElementById("legendLabel");
+  const legendLeft  = document.getElementById("legendLeft");
+  const legendRight = document.getElementById("legendRight");
+  const gradientBar = document.getElementById("gradientBar");
+  const spaceOpen   = document.getElementById("spaceLegendOpen");
+  const spaceOcc    = document.getElementById("spaceLegendOcc");
+
+  function fadeLegendOut(callback) {
+    legendBox.style.opacity = 0;
+    setTimeout(() => {
+      callback();
+      legendBox.style.opacity = 1;
+    }, 300);
+  }
+
+  function setLotLegend() {
+    legendLabel.textContent = "Lot:";
+    legendLeft.textContent = "Empty";
+    legendRight.textContent = "Full";
+    gradientBar.style.display = "block";
+    legendLeft.style.display = "inline";
+    legendRight.style.display = "inline";
+    spaceOpen.style.display = "none";
+    spaceOcc.style.display = "none";
+  }
+
+  function setSpaceLegend() {
+    legendLabel.textContent = "Spaces:";
+    gradientBar.style.display = "none";
+    legendLeft.style.display = "none";
+    legendRight.style.display = "none";
+    spaceOpen.style.display = "flex";
+    spaceOcc.style.display = "flex";
+  }
+
+  let showSpaces   = false;
+  let lastLotStats = { occupied: 0, total: 0, spaceData:{} };
+
+  let viewBox = { x: 0, y: 0, w: 4032, h: 3024 };
+
+  function applyViewBox() {
+    svg.setAttribute("viewBox", `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);
+  }
+
+  function clientToSvg(clientX, clientY) {
+    const rect = svg.getBoundingClientRect();
+    const viewAspect   = viewBox.w / viewBox.h;
+    const screenAspect = rect.width / rect.height;
+
+    let renderWidth, renderHeight, offsetX, offsetY;
+
+    if (screenAspect > viewAspect) {
+      renderHeight = rect.height;
+      renderWidth  = rect.height * viewAspect;
+      offsetX = (rect.width - renderWidth) / 2;
+      offsetY = 0;
+    } else {
+      renderWidth  = rect.width;
+      renderHeight = rect.width / viewAspect;
+      offsetX = 0;
+      offsetY = (rect.height - renderHeight) / 2;
+    }
+
+    const px = (clientX - rect.left - offsetX) / renderWidth;
+    const py = (clientY - rect.top  - offsetY) / renderHeight;
+
+    return {
+      x: viewBox.x + px * viewBox.w,
+      y: viewBox.y + py * viewBox.h
+    };
+  }
+
+  const SPACE_COORDS = {
+    "spot1": [1090.00, 608.00, 1337.00, 710.00],
+    "spot2": [1090.00, 736.00, 1337.00, 853.00],
+    "spot3": [1090.00, 879.00, 1337.00, 996.00],
+    "spot4": [1090.00, 1022.00, 1337.00, 1139.00],
+    "spot5": [1090.00, 1165.00, 1337.00, 1282.00],
+    "spot6":  [1090.00, 1308.00, 1337.00, 1425.00],
+    "spot7":  [1090.00, 1451.00, 1337.00, 1568.00],
+    "spot8":  [1090.00, 1594.00, 1337.00, 1711.00],
+    "spot9":  [1090.00, 1737.00, 1337.00, 1854.00],
+    "spot10": [1090.00, 1880.00, 1337.00, 1997.00],
+    "spot11": [1090.00, 2023.00, 1337.00, 2140.00],
+    "spot12": [1090.00, 2166.00, 1337.00, 2283.00],
+    "spot13": [1090.00, 2309.00, 1337.00, 2426.00],
+    "spot14": [1090.00, 2452.00, 1337.00, 2569.00],
+    "spot15": [1744.00, 608.00, 1991.50, 710.00],
+    "spot16": [1744.00, 736.00, 1991.50, 853.00],
+    "spot17": [1744.00, 879.00, 1991.50, 996.00],
+    "spot18": [1744.00, 1022.00, 1991.50, 1139.00],
+    "spot19": [1744.00, 1165.00, 1991.50, 1282.00],
+    "spot20": [1744.00, 1308.00, 1991.50, 1425.00],
+    "spot21": [1744.00, 1451.00, 1991.50, 1568.00],
+    "spot22": [1744.00, 1594.00, 1991.50, 1711.00],
+    "spot23": [1744.00, 1737.00, 1991.50, 1854.00],
+    "spot24": [1744.00, 1880.00, 1991.50, 1997.00],
+    "spot25": [1744.00, 2023.00, 1991.50, 2140.00],
+    "spot26": [1744.00, 2166.00, 1991.50, 2283.00],
+    "spot27": [1744.00, 2309.00, 1991.50, 2426.00],
+    "spot28": [1744.00, 2452.00, 1991.50, 2569.00],
+    "spot29": [2017.50, 608.00, 2265.00, 710.00],
+    "spot30": [2017.50, 736.00, 2265.00, 853.00],
+    "spot31": [2017.50, 879.00, 2265.00, 996.00],
+    "spot32": [2017.50, 1022.00, 2265.00, 1139.00],
+    "spot33": [2017.50, 1165.00, 2265.00, 1282.00],
+    "spot34": [2017.50, 1308.00, 2265.00, 1425.00],
+    "spot35": [2017.50, 1451.00, 2265.00, 1568.00],
+    "spot36": [2017.50, 1594.00, 2265.00, 1711.00],
+    "spot37": [2017.50, 1737.00, 2265.00, 1854.00],
+    "spot38": [2017.50, 1880.00, 2265.00, 1997.00],
+    "spot39": [2017.50, 2023.00, 2265.00, 2140.00],
+    "spot40": [2017.50, 2166.00, 2265.00, 2283.00],
+    "spot41": [2017.50, 2309.00, 2265.00, 2426.00],
+    "spot42": [2017.50, 2452.00, 2265.00, 2569.00],
+    "spot43": [2671.00, 322.00, 2919.50, 424.00],
+    "spot44": [2671.00, 465.00, 2919.50, 567.00],
+    "spot45": [2671.00, 608.00, 2919.50, 710.00],
+    "spot46": [2671.00, 736.00, 2919.50, 853.00],
+    "spot47": [2671.00, 879.00, 2919.50, 996.00],
+    "spot48": [2671.00, 1022.00, 2919.50, 1139.00],
+    "spot49": [2671.00, 1165.00, 2919.50, 1282.00],
+    "spot50": [2671.00, 1308.00, 2919.50, 1425.00],
+    "spot51": [2671.00, 1451.00, 2919.50, 1568.00],
+    "spot52": [2671.00, 1594.00, 2919.50, 1711.00],
+    "spot53": [2671.00, 1737.00, 2919.50, 1854.00],
+    "spot54": [2671.00, 1880.00, 2919.50, 1997.00],
+    "spot55": [2671.00, 2023.00, 2919.50, 2140.00],
+    "spot56": [2671.00, 2166.00, 2919.50, 2283.00],
+    "spot57": [2671.00, 2309.00, 2919.50, 2426.00],
+    "spot58": [2671.00, 2452.00, 2919.50, 2569.00]
+  };
+
+  function initSpaces() {
+    overlay.innerHTML = "";
+    Object.entries(SPACE_COORDS).forEach(([id, coords]) => {
+      const [x1,y1,x2,y2] = coords;
+      const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      rect.setAttribute("x", Math.min(x1,x2));
+      rect.setAttribute("y", Math.min(y1,y2));
+      rect.setAttribute("width",  Math.abs(x2 - x1));
+      rect.setAttribute("height", Math.abs(y2 - y1));
+      rect.setAttribute("id", `space-${id}`);
+      rect.setAttribute("class", "space-rect");
+      rect.style.opacity = "0"; 
+      overlay.appendChild(rect);
+    });
+  }
+
+  function updateSpaceColors(spaceData) {
+    Object.keys(SPACE_COORDS).forEach(id => {
+      const rect = document.getElementById(`space-${id}`);
+      if (!rect) return;
+
+      const state = spaceData?.[id] || "open";
+      if (state === "occupied") {
+        rect.style.fill = "rgba(255,0,0,0.6)";
+        rect.style.stroke = "#800000";
+      } else {
+        rect.style.fill = "rgba(0,255,0,0.45)";
+        rect.style.stroke = "#1b7a1b";
+      }
+    });
+  }
+
+  function lerp(a,b,t){ return a+(b-a)*t; }
+
+  function lotColor(fraction){
+    let r,g;
+    if(fraction <= 0.5){
+      r = lerp(0,255,fraction/0.5);
+      g = 255;
+    } else {
+      r = 255;
+      g = lerp(255,0,(fraction-0.5)/0.5);
+    }
+    return `rgba(${r},${g},0,0.50)`;
+  }
+
+  function updateLotStatus(spaceData) {
+    const ids = Object.keys(spaceData);
+    const total = ids.length;
+    const occupied = ids.filter(id => spaceData[id] === "occupied").length;
+
+    lastLotStats = { occupied, total, spaceData };
+
+    if (showSpaces) return;
+
+    if (total === 0){
+      lotRect.setAttribute("fill","rgba(0,255,0,0.25)");
+      return;
+    }
+
+    lotRect.setAttribute("fill", lotColor(occupied/total));
+  }
+
+  lotRect.addEventListener("mousemove", e => {
+    const {occupied, total} = lastLotStats;
+    tooltip.textContent = total > 0
+      ? `${occupied} occupied / ${total} total`
+      : "No data yet";
+
+    tooltip.style.left = (e.pageX + 12) + "px";
+    tooltip.style.top  = (e.pageY + 12) + "px";
+    tooltip.style.opacity = 1;
+  });
+
+  lotRect.addEventListener("mouseout", () => {
+    tooltip.style.opacity = 0;
+  });
+
+  lotRect.addEventListener("click", () => {
+    fadeLegendOut(() => {
+      showSpaces = !showSpaces;
+
+      if (showSpaces){
+        setSpaceLegend();
+
+        Object.keys(SPACE_COORDS).forEach(id => {
+          const rect = document.getElementById(`space-${id}`);
+          if (rect) rect.style.opacity = "1";
+        });
+
+        updateSpaceColors(lastLotStats.spaceData || {});
+        lotRect.setAttribute("fill","rgba(255,255,255,0.25)");
+        lotRect.setAttribute("stroke","rgba(0,0,0,0.15)");
+
+      } else {
+        setLotLegend();
+
+        Object.keys(SPACE_COORDS).forEach(id => {
+          const rect = document.getElementById(`space-${id}`);
+          if (rect) rect.style.opacity = "0";
+        });
+
+        const {occupied,total} = lastLotStats;
+        if(total > 0){
+          lotRect.setAttribute("fill", lotColor(occupied/total));
+        } else {
+          lotRect.setAttribute("fill","rgba(0,255,0,0.25)");
+        }
+        lotRect.setAttribute("stroke","rgba(0,0,0,0.35)");
+      }
+    });
+  });
+
+  async function fetchAndUpdate(){
+    try {
+      const json = await fetch(SPACES_URL + "?t=" + Date.now()).then(r => r.json());
+
+      const spaceData = json?.LotA || {};
+
+      updateLotStatus(spaceData);
+      if(showSpaces){
+        updateSpaceColors(spaceData);
+      }
+    } catch(e){
+      console.warn("JSON fetch error:", e);
+    }
+  }
+
+  svg.addEventListener("wheel", e => {
+    e.preventDefault();
+    const scale = e.deltaY < 0 ? 0.9 : 1.1;
+    const newW = viewBox.w * scale;
+    const newH = viewBox.h * scale;
+    if (newW > 4032 || newH > 3024) return;
+    if (newW < 4032 * 0.3 || newH < 3024 * 0.3) return;
+    const pos = clientToSvg(e.clientX, e.clientY);
+    viewBox.x = pos.x - (pos.x - viewBox.x) * scale;
+    viewBox.y = pos.y - (pos.y - viewBox.y) * scale;
+    viewBox.w = newW;
+    viewBox.h = newH;
+    applyViewBox();
+  });
+
+  let dragging = false;
+  let lastClientX = 0, lastClientY = 0;
+
+  svg.addEventListener("mousedown", e => {
+    dragging = true;
+    lastClientX = e.clientX;
+    lastClientY = e.clientY;
+  });
+
+  window.addEventListener("mouseup", () => dragging = false);
+
+  window.addEventListener("mousemove", e => {
+    if (!dragging) return;
+    const dx = e.clientX - lastClientX;
+    const dy = e.clientY - lastClientY;
+    const vx = (dx / svg.clientWidth)  * viewBox.w;
+    const vy = (dy / svg.clientHeight) * viewBox.h;
+    viewBox.x -= vx;
+    viewBox.y -= vy;
+    lastClientX = e.clientX;
+    lastClientY = e.clientY;
+    applyViewBox();
+  });
+
+  applyViewBox();
+  initSpaces();
+  fetchAndUpdate();
+  setInterval(fetchAndUpdate, 5000);
+
+  setLotLegend();
+
+  const themeToggle = document.getElementById("themeToggle");
+  const themeLabel = document.getElementById("themeLabel");
+
+  if (localStorage.getItem("theme") === "dark") {
+    document.documentElement.classList.add("dark");
+    themeToggle.checked = true;
+    themeLabel.textContent = "Dark Mode";
+  }
+
+  themeToggle.addEventListener("change", () => {
+    if (themeToggle.checked) {
+      document.documentElement.classList.add("dark");
+      themeLabel.textContent = "Dark Mode";
+      localStorage.setItem("theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      themeLabel.textContent = "Light Mode";
+      localStorage.setItem("theme", "light");
+    }
+  });
+  </script>
+
+</body>
+</html>
